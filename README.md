@@ -1,4 +1,4 @@
-# Real-Time Chat Application
+# Real Time Chat!
 
 Hey! Here's a modern, full-stack real-time chat application built with React, Socket.IO, Express, PostgreSQL, and Redis. Features user authentication, room-based messaging, and rate limiting.
 
