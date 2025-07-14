@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: chat_postgres
+    environment:
+      POSTGRES_DB: chatapp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - chat_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: chat_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - chat_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Express Backend
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chat_backend
+    environment:
+      - NODE_ENV=production
+      - DB_URL=postgresql://postgres:postgres@postgres:5432/chatapp
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+      - PORT=3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - chat_network
+    volumes:
+      - ./server:/app/server
+      - ./node_modules:/app/node_modules
+    command: ["sh", "/app/start-server.sh"]
+
+  # Frontend Development Server
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chat_frontend
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost:3000
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - chat_network
+    command: ["bun", "run", "dev", "--host", "0.0.0.0"]
+    depends_on:
+      - backend
+
+  # Redis CLI Service
+  redis-cli:
+    image: redis:7-alpine
+    container_name: chat_redis_cli
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - chat_network
+    command: ["redis-cli", "-h", "redis", "-p", "6379"]
+    stdin_open: true
+    tty: true
+
+  # PostgreSQL CLI Service
+  psql:
+    image: postgres:15-alpine
+    container_name: chat_psql
+    environment:
+      - PGPASSWORD=postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - chat_network
+    command: ["psql", "-h", "postgres", "-U", "postgres", "-d", "chatapp"]
+    stdin_open: true
+    tty: true
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  chat_network:
+    driver: bridge 
